@@ -1,10 +1,9 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "postgresql://deepfake_user:deepfake_pass@localhost:5432/deepfake_db"
+    DATABASE_URL: str = "postgresql://deepfake_user:deepfake_pass@127.0.0.1:5432/deepfake_db"
 
     # JWT
     SECRET_KEY: str = "your-secret-key-change-in-production"
@@ -14,6 +13,11 @@ class Settings(BaseSettings):
     # Upload
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
+
+    # Model (optional)
+    MODEL_NAME: str = "dima806/deepfake_vs_real_image_detection"
+    MODEL_CACHE_DIR: str = "models/cache"
+    USE_GPU: bool = False
 
     class Config:
         env_file = ".env"

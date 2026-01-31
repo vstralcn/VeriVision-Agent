@@ -6,6 +6,7 @@ from app.core.security import verify_password, create_access_token, get_password
 from app.models.models import User, AuditLog
 from app.schemas.schemas import Token, LoginRequest, UserCreate, UserResponse
 from app.core.config import settings
+from app.api.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -101,6 +102,3 @@ def get_current_user_info(
 ):
     """Get current user information."""
     return current_user
-
-
-from app.api.dependencies import get_current_user

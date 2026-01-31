@@ -57,7 +57,7 @@ class TraceRecord(Base):
 
     action = Column(String, nullable=False)  # uploaded, detected, verified
     description = Column(Text, nullable=True)
-    metadata = Column(JSON, nullable=True)
+    meta_info = Column(JSON, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
