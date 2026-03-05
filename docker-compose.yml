@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: docker.io/library/postgres:15-alpine
@@ -8,11 +6,12 @@ services:
       POSTGRES_USER: deepfake_user
       POSTGRES_PASSWORD: deepfake_pass
       POSTGRES_DB: deepfake_db
-    network_mode: "host"
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U deepfake_user -d deepfake_db"]
+      test: [ "CMD-SHELL", "pg_isready -U deepfake_user -d deepfake_db" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -21,11 +20,12 @@ services:
     build: ./backend
     container_name: deepfake-backend
     environment:
-      DATABASE_URL: postgresql://deepfake_user:deepfake_pass@localhost:5432/deepfake_db
+      DATABASE_URL: postgresql://deepfake_user:deepfake_pass@postgres:5432/deepfake_db
       SECRET_KEY: your-secret-key-change-in-production
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
-    network_mode: "host"
+    ports:
+      - "8000:8000"
     volumes:
       - ./backend:/app
       - ./backend/uploads:/app/uploads

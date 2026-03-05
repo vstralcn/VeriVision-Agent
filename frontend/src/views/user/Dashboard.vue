@@ -4,9 +4,9 @@
       <el-col :span="24">
         <el-card class="welcome-card">
           <h2>🔍 Deepfake Detection Platform</h2>
-          <p>AI-powered image authentication and traceability system</p>
+          <p>{{ $t('dashboard.subtitle') }}</p>
           <el-button type="primary" size="large" @click="goToDetection">
-            Start Detection
+            {{ $t('dashboard.startDetection') }}
           </el-button>
         </el-card>
       </el-col>
@@ -17,8 +17,8 @@
         <el-card>
           <template #header>
             <div class="card-header">
-              <span>Recent Detections</span>
-              <el-button text @click="goToDetection">View All</el-button>
+              <span>{{ $t('dashboard.recentDetections') }}</span>
+              <el-button text @click="goToDetection">{{ $t('dashboard.viewAll') }}</el-button>
             </div>
           </template>
 
@@ -28,7 +28,7 @@
             style="width: 100%"
           >
             <el-table-column prop="id" label="ID" width="80" />
-            <el-table-column label="Image" width="100">
+            <el-table-column :label="$t('common.image')" width="100">
               <template #default="{ row }">
                 <el-image
                   :src="getImageUrl(row.image_path)"
@@ -37,14 +37,14 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column label="Result" width="120">
+            <el-table-column :label="$t('common.result')" width="120">
               <template #default="{ row }">
                 <el-tag :type="row.is_fake ? 'danger' : 'success'">
-                  {{ row.is_fake ? 'Fake' : 'Real' }}
+                  {{ row.is_fake ? $t('common.fake') : $t('common.real') }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="Confidence" width="150">
+            <el-table-column :label="$t('common.confidence')" width="150">
               <template #default="{ row }">
                 <el-progress
                   :percentage="Math.round(row.confidence * 100)"
@@ -52,25 +52,25 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column label="Cert ID" prop="cert_id" />
-            <el-table-column label="Date" width="180">
+            <el-table-column :label="$t('common.certId')" prop="cert_id" />
+            <el-table-column :label="$t('common.date')" width="180">
               <template #default="{ row }">
                 {{ formatDate(row.created_at) }}
               </template>
             </el-table-column>
-            <el-table-column label="Actions" width="150">
+            <el-table-column :label="$t('common.actions')" width="150">
               <template #default="{ row }">
                 <el-button
                   size="small"
                   @click="viewTraceability(row.id)"
                 >
-                  View Details
+                  {{ $t('common.viewDetails') }}
                 </el-button>
               </template>
             </el-table-column>
           </el-table>
 
-          <el-empty v-if="!loading && recentDetections.length === 0" description="No detections yet" />
+          <el-empty v-if="!loading && recentDetections.length === 0" :description="$t('dashboard.noDetections')" />
         </el-card>
       </el-col>
     </el-row>

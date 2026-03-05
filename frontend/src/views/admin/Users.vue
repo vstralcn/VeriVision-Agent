@@ -33,7 +33,7 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="200">
+        <el-table-column :label="$t('common.actions')" width="200">
           <template #default="{ row }">
             <el-button
               :type="row.is_active ? 'warning' : 'success'"
@@ -92,7 +92,7 @@ const toggleUserStatus = async (user) => {
       'Confirm',
       {
         confirmButtonText: 'Yes',
-        cancelButtonText: 'Cancel',
+        cancelButtonText: $t('common.cancel'),
         type: 'warning'
       }
     )

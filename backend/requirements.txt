@@ -14,3 +14,8 @@ pillow==10.2.0
 numpy==1.26.3
 opencv-python==4.9.0.80
 python-dateutil==2.8.2
+albumentations
+tqdm
+scikit-learn
+onnx
+onnxruntime

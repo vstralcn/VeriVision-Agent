@@ -69,7 +69,7 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="150">
+        <el-table-column :label="$t('common.actions')" width="150">
           <template #default="{ row }">
             <el-button size="small" @click="viewDetail(row)">
               View Detail

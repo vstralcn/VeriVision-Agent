@@ -3,7 +3,7 @@
     <el-row :gutter="20">
       <el-col :span="6">
         <el-card class="stat-card">
-          <el-statistic title="Today's Detections" :value="stats.today_detection_count">
+          <el-statistic :title="$t('adminDash.todayDetections')" :value="stats.today_detection_count">
             <template #prefix>
               <el-icon><Camera /></el-icon>
             </template>
@@ -13,7 +13,7 @@
 
       <el-col :span="6">
         <el-card class="stat-card">
-          <el-statistic title="Today's Fake Count" :value="stats.today_fake_count">
+          <el-statistic :title="$t('adminDash.todayFakeCount')" :value="stats.today_fake_count">
             <template #prefix>
               <el-icon color="red"><Warning /></el-icon>
             </template>
@@ -23,7 +23,7 @@
 
       <el-col :span="6">
         <el-card class="stat-card">
-          <el-statistic title="Today's Fake Ratio" :value="(stats.today_fake_ratio * 100).toFixed(2)" suffix="%">
+          <el-statistic :title="$t('adminDash.todayFakeRatio')" :value="(stats.today_fake_ratio * 100).toFixed(2)" suffix="%">
             <template #prefix>
               <el-icon><PieChart /></el-icon>
             </template>
@@ -33,7 +33,7 @@
 
       <el-col :span="6">
         <el-card class="stat-card">
-          <el-statistic title="Total Users" :value="stats.total_users">
+          <el-statistic :title="$t('adminDash.totalUsers')" :value="stats.total_users">
             <template #prefix>
               <el-icon><User /></el-icon>
             </template>
@@ -46,12 +46,12 @@
       <el-col :span="12">
         <el-card>
           <template #header>
-            <h3>📊 Detection Statistics</h3>
+            <h3>{{ $t('adminDash.statsTitle') }}</h3>
           </template>
-          <el-statistic title="Total Detections" :value="stats.total_detections" />
+          <el-statistic :title="$t('adminDash.totalDetections')" :value="stats.total_detections" />
           <el-divider />
           <div class="progress-item">
-            <span>Fake Detection Rate</span>
+            <span>{{ $t('adminDash.fakeRate') }}</span>
             <el-progress
               :percentage="Math.round(stats.today_fake_ratio * 100)"
               :color="getProgressColor(stats.today_fake_ratio)"
@@ -63,7 +63,7 @@
       <el-col :span="12">
         <el-card>
           <template #header>
-            <h3>🎯 Quick Actions</h3>
+            <h3>{{ $t('adminDash.quickActionsTitle') }}</h3>
           </template>
           <el-space direction="vertical" style="width: 100%">
             <el-button type="primary" style="width: 100%" @click="goToUsers">
@@ -87,25 +87,25 @@
       <el-col :span="24">
         <el-card>
           <template #header>
-            <h3>📈 System Overview</h3>
+            <h3>{{ $t('adminDash.systemOverview') }}</h3>
           </template>
           <el-descriptions :column="3" border>
-            <el-descriptions-item label="Today's Detections">
+            <el-descriptions-item :label="$t('adminDash.todayDetections')">
               {{ stats.today_detection_count }}
             </el-descriptions-item>
-            <el-descriptions-item label="Today's Fake Images">
+            <el-descriptions-item :label="$t('adminDash.todayFakeImages')">
               {{ stats.today_fake_count }}
             </el-descriptions-item>
-            <el-descriptions-item label="Today's Real Images">
+            <el-descriptions-item :label="$t('adminDash.todayRealImages')">
               {{ stats.today_detection_count - stats.today_fake_count }}
             </el-descriptions-item>
-            <el-descriptions-item label="Total Users">
+            <el-descriptions-item :label="$t('adminDash.totalUsers')">
               {{ stats.total_users }}
             </el-descriptions-item>
-            <el-descriptions-item label="Total Detections">
+            <el-descriptions-item :label="$t('adminDash.totalDetections')">
               {{ stats.total_detections }}
             </el-descriptions-item>
-            <el-descriptions-item label="Fake Ratio">
+            <el-descriptions-item :label="$t('adminDash.fakeRatio')">
               {{ (stats.today_fake_ratio * 100).toFixed(2) }}%
             </el-descriptions-item>
           </el-descriptions>

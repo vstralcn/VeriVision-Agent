@@ -5,11 +5,11 @@
       <el-col :span="24" v-if="!detectionResult">
         <el-card>
           <template #header>
-            <h3>Upload Image for Detection</h3>
+            <h3>{{ $t('detection.uploadTitle') }}</h3>
           </template>
 
           <el-upload
-            class="upload-demo"
+            class="upload-area"
             drag
             :auto-upload="false"
             :on-change="handleFileChange"
@@ -18,11 +18,11 @@
           >
             <el-icon class="el-icon--upload"><upload-filled /></el-icon>
             <div class="el-upload__text">
-              Drop image here or <em>click to upload</em>
+              {{ $t('detection.dropOrClick') }}
             </div>
             <template #tip>
               <div class="el-upload__tip">
-                Supported formats: JPG, PNG, GIF (Max 10MB)
+                {{ $t('detection.supportedFormats') }}
               </div>
             </template>
           </el-upload>
@@ -40,11 +40,9 @@
                 :loading="detecting"
                 @click="startDetection"
               >
-                Start Detection
+                {{ $t('dashboard.startDetection') }}
               </el-button>
-              <el-button size="large" @click="resetUpload">
-                Cancel
-              </el-button>
+              <el-button size="large" @click="resetUpload">{{ $t('common.cancel') }}</el-button>
             </div>
           </div>
         </el-card>
@@ -55,67 +53,74 @@
         <el-card>
           <template #header>
             <div class="card-header">
-              <h3>Detection Results</h3>
-              <el-button @click="resetUpload">New Detection</el-button>
+              <h3>{{ $t('detection.resultsTitle') }}</h3>
+              <el-button @click="resetUpload">{{ $t('detection.newDetection') }}</el-button>
             </div>
           </template>
 
           <el-row :gutter="20">
             <!-- Original & Heatmap -->
             <el-col :span="12">
-              <h4>Original Image</h4>
-              <el-image
-                :src="getImageUrl(detectionResult.image_path)"
-                fit="contain"
-                style="width: 100%; border-radius: 8px"
-              />
+              <h4>{{ $t('detection.originalImage') }}</h4>
+              <div class="xray-box">
+                <el-image
+                  :src="getImageUrl(detectionResult.image_path)"
+                  fit="contain"
+                  style="width: 100%; height: 100%;"
+                />
+              </div>
             </el-col>
             <el-col :span="12">
-              <h4>Detection Heatmap</h4>
-              <el-image
-                :src="getImageUrl(detectionResult.heatmap_path)"
-                fit="contain"
-                style="width: 100%; border-radius: 8px"
-              />
+              <h4>{{ $t('detection.heatmap') }}</h4>
+              <div class="xray-box heatmap-box">
+                <div class="scanner-line"></div>
+                <el-image
+                  :src="getImageUrl(detectionResult.heatmap_path)"
+                  fit="contain"
+                  style="width: 100%; height: 100%;"
+                />
+              </div>
             </el-col>
           </el-row>
 
           <!-- Analysis Report -->
           <el-divider />
-          <h3>📊 Intelligent Analysis Report</h3>
+          <h3>{{ $t('detection.analysisReport') }}</h3>
 
           <el-descriptions :column="2" border style="margin-top: 20px">
-            <el-descriptions-item label="Verdict">
+            <el-descriptions-item :label="$t('detection.verdict')">
               <el-tag
-                :type="detectionResult.is_fake ? 'danger' : 'success'"
+                :type="getVerdictType(detectionResult)"
                 size="large"
+                class="font-mono font-bold"
               >
                 {{ detectionResult.analysis_report.verdict }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="Risk Level">
+            <el-descriptions-item :label="$t('detection.riskLevel')">
               <el-tag
-                :type="getRiskLevelType(detectionResult.analysis_report.risk_level)"
+                :type="getVerdictType(detectionResult)"
                 size="large"
+                class="font-mono font-bold"
               >
                 {{ detectionResult.analysis_report.risk_level }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="Fake Probability">
-              {{ (detectionResult.fake_probability * 100).toFixed(2) }}%
+            <el-descriptions-item :label="$t('detection.fakeProbability')">
+              <span class="font-mono">{{ (detectionResult.fake_probability * 100).toFixed(2) }}%</span>
             </el-descriptions-item>
-            <el-descriptions-item label="Confidence">
-              {{ (detectionResult.confidence * 100).toFixed(2) }}%
+            <el-descriptions-item :label="$t('common.confidence')">
+              <span class="font-mono">{{ (detectionResult.confidence * 100).toFixed(2) }}%</span>
             </el-descriptions-item>
           </el-descriptions>
 
           <el-card style="margin-top: 20px" shadow="never">
-            <h4>Summary</h4>
+            <h4>{{ $t('detection.summary') }}</h4>
             <p>{{ detectionResult.analysis_report.summary }}</p>
           </el-card>
 
           <el-card style="margin-top: 20px" shadow="never">
-            <h4>Detailed Analysis</h4>
+            <h4>{{ $t('detection.detailedAnalysis') }}</h4>
             <el-row :gutter="20">
               <el-col :span="12" v-for="(value, key) in detectionResult.analysis_report.analysis" :key="key">
                 <div class="analysis-item">
@@ -130,7 +135,7 @@
           </el-card>
 
           <el-card style="margin-top: 20px" shadow="never">
-            <h4>Recommendations</h4>
+            <h4>{{ $t('detection.recommendations') }}</h4>
             <ul>
               <li v-for="(rec, index) in detectionResult.analysis_report.recommendations" :key="index">
                 {{ rec }}
@@ -140,21 +145,21 @@
 
           <!-- Trusted Certification -->
           <el-divider />
-          <h3>🔐 Trusted Certification</h3>
+          <h3>{{ $t('detection.trustedCert') }}</h3>
 
           <el-card style="margin-top: 20px" class="cert-card">
             <el-descriptions :column="1" border>
-              <el-descriptions-item label="Certification ID">
-                <el-tag type="info">{{ detectionResult.cert_id }}</el-tag>
+              <el-descriptions-item :label="$t('common.certId')">
+                <el-tag type="info" class="font-mono">{{ detectionResult.cert_id }}</el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="SHA256 Hash">
-                <code style="font-size: 12px">{{ detectionResult.sha256 }}</code>
+              <el-descriptions-item :label="$t('detection.sha256')">
+                <code class="font-mono" style="font-size: 12px">{{ detectionResult.sha256 }}</code>
               </el-descriptions-item>
-              <el-descriptions-item label="Perceptual Hash">
-                <code style="font-size: 12px">{{ detectionResult.phash }}</code>
+              <el-descriptions-item :label="$t('detection.phash')">
+                <code class="font-mono" style="font-size: 12px">{{ detectionResult.phash }}</code>
               </el-descriptions-item>
-              <el-descriptions-item label="Signature">
-                <code style="font-size: 12px; word-break: break-all">
+              <el-descriptions-item :label="$t('detection.signature')">
+                <code class="font-mono" style="font-size: 12px; word-break: break-all">
                   {{ detectionResult.cert_signature }}
                 </code>
               </el-descriptions-item>
@@ -165,12 +170,8 @@
                 type="success"
                 :loading="verifying"
                 @click="verifyCertification"
-              >
-                Verify Certification
-              </el-button>
-              <el-button @click="viewTraceability">
-                View Traceability
-              </el-button>
+              >{{ $t('detection.verifyCert') }}</el-button>
+              <el-button @click="viewTraceability">{{ $t('detection.viewTraceability') }}</el-button>
             </div>
           </el-card>
         </el-card>
@@ -227,13 +228,16 @@ const getImageUrl = (path) => {
   return detectionAPI.getImageUrl(path)
 }
 
-const getRiskLevelType = (level) => {
-  const types = {
-    'Low': 'success',
-    'Medium': 'warning',
-    'High': 'danger'
+// "只有在检测出 Deepfake 且 Risk level 极高时 才大面积亮起"
+const getVerdictType = (result) => {
+  const { is_fake, analysis_report } = result
+  if (is_fake && analysis_report.risk_level === 'High') {
+    return 'danger'
   }
-  return types[level] || 'info'
+  if (!is_fake) {
+    return 'success'
+  }
+  return 'warning'
 }
 
 const getProgressColor = (value) => {
@@ -285,8 +289,56 @@ const viewTraceability = () => {
   margin: 0;
 }
 
-.upload-demo {
+/* Hardcore Upload Area */
+:deep(.el-upload-dragger) {
+  border: 1px dashed var(--el-border-color-light);
+  background: var(--el-bg-color-page);
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+:deep(.el-upload-dragger:hover) {
+  border-color: var(--el-color-primary);
+  background: var(--el-bg-color);
+}
+
+.upload-area {
   text-align: center;
+}
+
+/* X-ray style image viewer */
+.xray-box {
+  background: #000;
+  border-radius: 4px;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #333;
+}
+
+/* Heatmap with Scanner Line */
+.heatmap-box {
+  position: relative;
+}
+.scanner-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: rgba(0, 255, 255, 0.6);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.8), 0 0 20px rgba(0, 255, 255, 0.4);
+  animation: scan 3s linear infinite;
+  z-index: 10;
+}
+
+@keyframes scan {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
 }
 
 .analysis-item {
@@ -297,15 +349,22 @@ const viewTraceability = () => {
   display: block;
   margin-bottom: 8px;
   font-weight: 500;
+  color: #4B5563;
 }
 
 .cert-card {
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background: #FFFFFF;
 }
 
 code {
-  background: #f4f4f5;
-  padding: 2px 6px;
+  background: #F5F7FA;
+  padding: 4px 8px;
   border-radius: 4px;
+  color: #1F2937;
+  border: 1px solid var(--el-border-color-light);
+}
+
+.font-bold {
+  font-weight: bold;
 }
 </style>

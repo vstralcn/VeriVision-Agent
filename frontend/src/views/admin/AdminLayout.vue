@@ -2,7 +2,7 @@
   <el-container class="admin-layout">
     <el-aside width="200px">
       <div class="logo">
-        <h3>⚙️ Admin Panel</h3>
+        <h3>⚙️ {{ $t('adminLayout.title') }}</h3>
       </div>
       <el-menu
         :default-active="activeMenu"
@@ -13,19 +13,19 @@
       >
         <el-menu-item index="/admin">
           <el-icon><DataAnalysis /></el-icon>
-          <span>Dashboard</span>
+          <span>{{ $t('adminLayout.dashboard') }}</span>
         </el-menu-item>
         <el-menu-item index="/admin/users">
           <el-icon><User /></el-icon>
-          <span>User Management</span>
+          <span>{{ $t('adminLayout.users') }}</span>
         </el-menu-item>
         <el-menu-item index="/admin/audit">
           <el-icon><Document /></el-icon>
-          <span>Audit Logs</span>
+          <span>{{ $t('adminLayout.audit') }}</span>
         </el-menu-item>
         <el-menu-item index="/">
           <el-icon><Back /></el-icon>
-          <span>Back to User</span>
+          <span>{{ $t('adminLayout.backToUser') }}</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
@@ -33,8 +33,22 @@
     <el-container>
       <el-header>
         <div class="header-content">
-          <span class="welcome">Admin: {{ authStore.user?.email }}</span>
-          <el-button type="danger" @click="handleLogout">Logout</el-button>
+          <span class="welcome">{{ $t('adminLayout.admin') }}: {{ authStore.user?.email }}</span>
+          <div class="header-right">
+            <el-dropdown @command="handleLanguageChange" class="lang-dropdown">
+              <span class="el-dropdown-link">
+                {{ currentLang }}
+                <el-icon class="el-icon--right"><arrow-down /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="zh">中文</el-dropdown-item>
+                  <el-dropdown-item command="en">English</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-button type="danger" @click="handleLogout">{{ $t('common.logout') }}</el-button>
+          </div>
         </div>
       </el-header>
 
@@ -49,19 +63,27 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
-import { DataAnalysis, User, Document, Back } from '@element-plus/icons-vue'
+import { DataAnalysis, User, Document, Back, ArrowDown } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const { t, locale } = useI18n()
 
 const activeMenu = computed(() => route.path)
+const currentLang = computed(() => locale.value === 'zh' ? '中文' : 'English')
+
+const handleLanguageChange = (lang) => {
+  locale.value = lang
+  localStorage.setItem('locale', lang)
+}
 
 const handleLogout = async () => {
-  await ElMessageBox.confirm('Are you sure you want to logout?', 'Confirm', {
-    confirmButtonText: 'Yes',
-    cancelButtonText: 'Cancel',
+  await ElMessageBox.confirm(t('common.logoutConfirm'), t('common.confirm'), {
+    confirmButtonText: t('common.yes'),
+    cancelButtonText: t('common.cancel'),
     type: 'warning'
   })
 
@@ -92,6 +114,9 @@ const handleLogout = async () => {
   margin: 0;
   color: #fff;
   font-size: 16px;
+  text-align: center;
+  padding: 0 10px;
+  line-height: 1.2;
 }
 
 .el-header {
@@ -105,6 +130,24 @@ const handleLogout = async () => {
   width: 100%;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.lang-dropdown {
+  cursor: pointer;
+  color: #606266;
+  display: flex;
+  align-items: center;
+}
+
+.el-dropdown-link {
+  display: flex;
   align-items: center;
 }
 

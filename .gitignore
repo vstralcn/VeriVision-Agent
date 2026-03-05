@@ -68,3 +68,6 @@ Thumbs.db
 
 # Alembic
 alembic/versions/*.pyc
+backend/app/ml_models/weights/*.pt
+*.pt
+backend/app/ml_models/weights/*.pt

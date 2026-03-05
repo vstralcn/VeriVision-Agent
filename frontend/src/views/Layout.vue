@@ -2,7 +2,7 @@
   <el-container class="layout-container">
     <el-aside width="200px">
       <div class="logo">
-        <h3>🔍 Deepfake Detector</h3>
+        <h3>🔍 {{ $t('login.title') }}</h3>
       </div>
       <el-menu
         :default-active="activeMenu"
@@ -13,23 +13,23 @@
       >
         <el-menu-item index="/">
           <el-icon><HomeFilled /></el-icon>
-          <span>Dashboard</span>
+          <span>{{ $t('menu.dashboard') }}</span>
         </el-menu-item>
         <el-menu-item index="/detection">
           <el-icon><Camera /></el-icon>
-          <span>Detection</span>
+          <span>{{ $t('menu.detection') }}</span>
         </el-menu-item>
         <el-menu-item index="/traceability">
           <el-icon><Connection /></el-icon>
-          <span>Traceability</span>
+          <span>{{ $t('menu.traceability') }}</span>
         </el-menu-item>
         <el-menu-item index="/profile">
           <el-icon><User /></el-icon>
-          <span>Profile</span>
+          <span>{{ $t('menu.profile') }}</span>
         </el-menu-item>
         <el-menu-item v-if="authStore.isAdmin" index="/admin">
           <el-icon><Setting /></el-icon>
-          <span>Admin Panel</span>
+          <span>{{ $t('menu.adminPanel') }}</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
@@ -37,8 +37,22 @@
     <el-container>
       <el-header>
         <div class="header-content">
-          <span class="welcome">Welcome, {{ authStore.user?.nickname || authStore.user?.email }}</span>
-          <el-button type="danger" @click="handleLogout">Logout</el-button>
+          <span class="welcome">{{ $t('common.welcome') }}, {{ authStore.user?.nickname || authStore.user?.email }}</span>
+          <div class="header-right">
+            <el-dropdown @command="handleLanguageChange" class="lang-dropdown">
+              <span class="el-dropdown-link">
+                {{ currentLang }}
+                <el-icon class="el-icon--right"><arrow-down /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="zh">中文</el-dropdown-item>
+                  <el-dropdown-item command="en">English</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-button type="danger" @click="handleLogout">{{ $t('common.logout') }}</el-button>
+          </div>
         </div>
       </el-header>
 
@@ -53,19 +67,27 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
-import { HomeFilled, Camera, Connection, User, Setting } from '@element-plus/icons-vue'
+import { HomeFilled, Camera, Connection, User, Setting, ArrowDown } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const { t, locale } = useI18n()
 
 const activeMenu = computed(() => route.path)
+const currentLang = computed(() => locale.value === 'zh' ? '中文' : 'English')
+
+const handleLanguageChange = (lang) => {
+  locale.value = lang
+  localStorage.setItem('locale', lang)
+}
 
 const handleLogout = async () => {
-  await ElMessageBox.confirm('Are you sure you want to logout?', 'Confirm', {
-    confirmButtonText: 'Yes',
-    cancelButtonText: 'Cancel',
+  await ElMessageBox.confirm(t('common.logoutConfirm'), t('common.confirm'), {
+    confirmButtonText: t('common.yes'),
+    cancelButtonText: t('common.cancel'),
     type: 'warning'
   })
 
@@ -96,6 +118,9 @@ const handleLogout = async () => {
   margin: 0;
   color: #fff;
   font-size: 16px;
+  text-align: center;
+  padding: 0 10px;
+  line-height: 1.2;
 }
 
 .el-header {
@@ -109,6 +134,24 @@ const handleLogout = async () => {
   width: 100%;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.lang-dropdown {
+  cursor: pointer;
+  color: #606266;
+  display: flex;
+  align-items: center;
+}
+
+.el-dropdown-link {
+  display: flex;
   align-items: center;
 }
 

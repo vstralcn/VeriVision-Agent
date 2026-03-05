@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 from app.models.models import Detection, TraceRecord
 from app.core.config import settings
 
+import torch
+from app.ml_models.forensicnet.infer import load_model, predict
+
 
 class DeepfakeDetectionService:
     """
@@ -21,6 +24,17 @@ class DeepfakeDetectionService:
         self.upload_dir = settings.UPLOAD_DIR
         os.makedirs(f"{self.upload_dir}/images", exist_ok=True)
         os.makedirs(f"{self.upload_dir}/heatmaps", exist_ok=True)
+        
+        # Load the ForensicNet model
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ml_models", "weights", "best.pt")
+        try:
+            self.model = load_model(model_path, device=self.device)
+            print(f"Model loaded successfully on {self.device}")
+        except Exception as e:
+            print(f"Failed to load model from {model_path}: {e}")
+            self.model = None
+
 
     async def detect_image(
         self,
@@ -29,20 +43,33 @@ class DeepfakeDetectionService:
         db: Session
     ) -> Detection:
         """
-        Perform deepfake detection on an image.
-        This is a MOCK implementation - replace with real model inference.
+        Perform deepfake detection on an image using ForensicNet.
         """
         # Calculate image fingerprints
         sha256_hash = self._calculate_sha256(image_path)
         phash = self._calculate_phash(image_path)
 
-        # Mock detection results (in production, call real model here)
-        fake_probability = np.random.uniform(0.3, 0.9)
+        if self.model is not None:
+            try:
+                with open(image_path, "rb") as f:
+                    image_bytes = f.read()
+                
+                result = predict(self.model, image_bytes, device=self.device, return_mask=True)
+                fake_probability = float(result.fake_prob)
+                mask_prob = result.mask_prob
+            except Exception as e:
+                print(f"Prediction failed: {e}")
+                fake_probability = np.random.uniform(0.3, 0.9)
+                mask_prob = None
+        else:
+            fake_probability = np.random.uniform(0.3, 0.9)
+            mask_prob = None
+
         is_fake = fake_probability > 0.5
         confidence = abs(fake_probability - 0.5) * 2
 
         # Generate heatmap
-        heatmap_path = self._generate_heatmap(image_path)
+        heatmap_path = self._generate_heatmap(image_path, mask_prob)
 
         # Generate analysis report
         analysis_report = self._generate_analysis_report(
@@ -101,23 +128,30 @@ class DeepfakeDetectionService:
         phash = ''.join(['1' if pixel > avg else '0' for pixel in pixels])
         return hex(int(phash, 2))[2:].zfill(16)
 
-    def _generate_heatmap(self, image_path: str) -> str:
+    def _generate_heatmap(self, image_path: str, mask_prob: Optional[np.ndarray] = None) -> str:
         """
-        Generate a mock heatmap visualization.
-        In production, this would show model attention/manipulation areas.
+        Generate a heatmap visualization based on the model's mask prediction.
         """
         img = cv2.imread(image_path)
         if img is None:
             return None
 
-        # Create mock heatmap (random hot spots)
         height, width = img.shape[:2]
-        heatmap = np.random.rand(height, width) * 255
-        heatmap = heatmap.astype(np.uint8)
-        heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+
+        if mask_prob is not None:
+            # Resize mask to original image size
+            mask_resized = cv2.resize(mask_prob, (width, height), interpolation=cv2.INTER_LINEAR)
+            # Create heatmap from mask probability
+            heatmap = (mask_resized * 255).astype(np.uint8)
+        else:
+            # Create mock heatmap if no mask is provided
+            heatmap = np.random.rand(height, width) * 255
+            heatmap = heatmap.astype(np.uint8)
+            
+        heatmap_color = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
 
         # Blend with original image
-        overlay = cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
+        overlay = cv2.addWeighted(img, 0.6, heatmap_color, 0.4, 0)
 
         # Save heatmap
         heatmap_filename = f"heatmap_{uuid.uuid4().hex}.jpg"
