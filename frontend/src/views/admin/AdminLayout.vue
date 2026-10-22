@@ -23,6 +23,10 @@
           <el-icon><Document /></el-icon>
           <span>{{ $t('adminLayout.audit') }}</span>
         </el-menu-item>
+        <el-menu-item index="/admin/settings">
+          <el-icon><Setting /></el-icon>
+          <span>{{ $t('adminLayout.settings') }}</span>
+        </el-menu-item>
         <el-menu-item index="/">
           <el-icon><Back /></el-icon>
           <span>{{ $t('adminLayout.backToUser') }}</span>
@@ -65,7 +69,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
-import { DataAnalysis, User, Document, Back, ArrowDown } from '@element-plus/icons-vue'
+import { DataAnalysis, User, Document, Back, ArrowDown, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()

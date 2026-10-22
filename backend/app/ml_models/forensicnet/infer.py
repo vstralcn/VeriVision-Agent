@@ -1,16 +1,17 @@
 
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Optional, Dict, Any, Tuple
-import io
 
-import numpy as np
+from dataclasses import dataclass
+from typing import Optional, Tuple
+
 import cv2
+import numpy as np
 import torch
 
+from .data import IMAGENET_MEAN, IMAGENET_STD
 from .model import ForensicNet
 from .utils import compute_ela_rgb, compute_fft_mag, rgb_to_gray01
-from .data import IMAGENET_MEAN, IMAGENET_STD
+
 
 @dataclass
 class InferenceResult:
@@ -47,7 +48,7 @@ def _preprocess(image_bytes: bytes, img_size: int = 224) -> Tuple[torch.Tensor, 
 @torch.no_grad()
 def load_model(ckpt_path: str, device: str = "cpu") -> ForensicNet:
     dev = torch.device(device)
-    ckpt = torch.load(ckpt_path, map_location=dev)
+    ckpt = torch.load(ckpt_path, map_location=dev, weights_only=True)
     model = ForensicNet(pretrained=False).to(dev)
     model.load_state_dict(ckpt["model"], strict=True)
     model.eval()

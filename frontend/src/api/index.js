@@ -19,7 +19,8 @@ export const detectionAPI = {
     const formData = new FormData()
     formData.append('file', file)
     return api.post('/detection/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000
     })
   },
 
@@ -43,8 +44,11 @@ export const detectionAPI = {
     return api.post(`/detection/${id}/verify`)
   },
 
-  getImageUrl(path) {
-    return `http://localhost:8000/${path}`
+  getMedia(id, kind = 'image') {
+    return api.get(`/detection/${id}/${kind}`, {
+      responseType: 'blob',
+      timeout: 60000
+    })
   }
 }
 
@@ -77,5 +81,17 @@ export const adminAPI = {
 
   getAuditLogDetail(logId) {
     return api.get(`/admin/audit-logs/${logId}`)
+  },
+
+  getLLMConfig() {
+    return api.get('/admin/llm-config')
+  },
+
+  updateLLMConfig(data) {
+    return api.put('/admin/llm-config', data)
+  },
+
+  testLLMConfig() {
+    return api.post('/admin/llm-config/test')
   }
 }

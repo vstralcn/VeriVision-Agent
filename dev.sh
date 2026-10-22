@@ -93,12 +93,12 @@ case "$1" in
 
     test-backend)
         echo "🧪 Running backend tests..."
-        docker-compose exec backend pytest
+        docker-compose exec backend python -m pytest
         ;;
 
     lint-backend)
         echo "🔍 Linting backend code..."
-        docker-compose exec backend flake8 app/
+        docker-compose exec backend ruff check app/ tests/
         ;;
 
     frontend)

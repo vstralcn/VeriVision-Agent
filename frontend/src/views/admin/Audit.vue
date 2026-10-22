@@ -159,8 +159,8 @@ const loadAuditLogs = async () => {
     }
 
     const data = await adminAPI.getAuditLogs(params)
-    auditLogs.value = data
-    total.value = data.length
+    auditLogs.value = data.items
+    total.value = data.total
   } catch (error) {
     ElMessage.error('Failed to load audit logs')
   } finally {

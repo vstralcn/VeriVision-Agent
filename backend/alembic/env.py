@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.core.database import Base
-from app.models.models import User, Detection, TraceRecord, AuditLog
+from app.models.models import LLMConfig, User, Detection, TraceRecord, AuditLog
 
 # this is the Alembic Config object
 config = context.config

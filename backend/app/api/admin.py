@@ -1,17 +1,25 @@
-from typing import List, Optional
-from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, desc, func
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, and_
-from app.core.database import get_db
+
 from app.api.dependencies import get_current_admin
-from app.models.models import User, Detection, AuditLog
+from app.core.database import get_db
+from app.models.models import AuditLog, Detection, LLMConfig, User
 from app.schemas.schemas import (
-    DashboardStats,
-    UserManagementResponse,
+    AuditLogListResponse,
     AuditLogResponse,
+    DashboardStats,
+    LLMConfigResponse,
+    LLMConfigUpdate,
+    LLMTestResult,
+    UserManagementListResponse,
+    UserManagementResponse,
     UserResponse,
 )
+from app.services.llm_service import llm_service
 
 router = APIRouter()
 
@@ -45,7 +53,7 @@ def get_dashboard_stats(
             and_(
                 Detection.created_at >= today_start,
                 Detection.created_at <= today_end,
-                Detection.is_fake == True
+                Detection.is_fake.is_(True)
             )
         )
         .scalar()
@@ -73,23 +81,27 @@ def get_dashboard_stats(
     )
 
 
-@router.get("/users", response_model=List[UserManagementResponse])
+@router.get("/users", response_model=UserManagementListResponse)
 def get_users(
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
     """Get all users for management."""
-    users = db.query(User).offset(skip).limit(limit).all()
+    total = db.query(func.count(User.id)).scalar() or 0
+    rows = (
+        db.query(User, func.count(Detection.id).label("detection_count"))
+        .outerjoin(Detection, Detection.user_id == User.id)
+        .group_by(User.id)
+        .order_by(User.id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
     result = []
-    for user in users:
-        detection_count = (
-            db.query(func.count(Detection.id))
-            .filter(Detection.user_id == user.id)
-            .scalar()
-        )
+    for user, detection_count in rows:
         result.append(
             UserManagementResponse(
                 id=user.id,
@@ -102,7 +114,7 @@ def get_users(
             )
         )
 
-    return result
+    return UserManagementListResponse(items=result, total=total)
 
 
 @router.put("/users/{user_id}/toggle-active", response_model=UserResponse)
@@ -150,10 +162,10 @@ def toggle_user_active(
     return user
 
 
-@router.get("/audit-logs", response_model=List[AuditLogResponse])
+@router.get("/audit-logs", response_model=AuditLogListResponse)
 def get_audit_logs(
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     action: Optional[str] = Query(None),
     user_id: Optional[int] = Query(None),
     success: Optional[bool] = Query(None),
@@ -177,7 +189,7 @@ def get_audit_logs(
     if end_date:
         query = query.filter(AuditLog.created_at <= end_date)
 
-    # Order by most recent first
+    total = query.with_entities(func.count(AuditLog.id)).scalar() or 0
     audit_logs = (
         query.order_by(desc(AuditLog.created_at))
         .offset(skip)
@@ -185,7 +197,7 @@ def get_audit_logs(
         .all()
     )
 
-    return audit_logs
+    return AuditLogListResponse(items=audit_logs, total=total)
 
 
 @router.get("/audit-logs/{log_id}", response_model=AuditLogResponse)
@@ -204,3 +216,95 @@ def get_audit_log_detail(
         )
 
     return audit_log
+
+
+# ──────────────────────────────────────────
+# LLM / AI Agent configuration
+# ──────────────────────────────────────────
+
+def _get_or_create_llm_config(db: Session) -> LLMConfig:
+    config = db.query(LLMConfig).filter(LLMConfig.id == 1).first()
+    if not config:
+        config = LLMConfig(id=1)
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+    return config
+
+
+def _to_response(config: LLMConfig) -> LLMConfigResponse:
+    return LLMConfigResponse(
+        id=config.id,
+        provider=config.provider or "openai",
+        api_base_url=config.api_base_url or "https://api.openai.com/v1",
+        api_key_masked=llm_service.mask_key(config.api_key or ""),
+        model=config.model or "gpt-4o-mini",
+        enabled=bool(config.enabled),
+        max_tokens=config.max_tokens or 512,
+        temperature=config.temperature if config.temperature is not None else 0.3,
+        updated_at=config.updated_at,
+    )
+
+
+@router.get("/llm-config", response_model=LLMConfigResponse)
+def get_llm_config(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Get the current LLM / AI agent configuration (API key is masked)."""
+    config = _get_or_create_llm_config(db)
+    return _to_response(config)
+
+
+@router.put("/llm-config", response_model=LLMConfigResponse)
+def update_llm_config(
+    data: LLMConfigUpdate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Update the LLM / AI agent configuration and reload the service."""
+    config = _get_or_create_llm_config(db)
+
+    if data.provider is not None:
+        config.provider = data.provider
+    if data.api_base_url is not None:
+        config.api_base_url = data.api_base_url
+    if data.api_key is not None and data.api_key != "":
+        config.api_key = data.api_key
+    if data.model is not None:
+        config.model = data.model
+    if data.enabled is not None:
+        config.enabled = data.enabled
+    if data.max_tokens is not None:
+        config.max_tokens = data.max_tokens
+    if data.temperature is not None:
+        config.temperature = data.temperature
+
+    db.commit()
+    db.refresh(config)
+
+    # Hot-reload the singleton so the next detection uses the new settings
+    llm_service.reload_config(config)
+
+    # Audit log
+    audit = AuditLog(
+        user_id=current_admin.id,
+        action="admin_action",
+        resource="llm_config",
+        success=True,
+        detail={"action": "update_llm_config", "model": config.model, "enabled": config.enabled},
+    )
+    db.add(audit)
+    db.commit()
+
+    return _to_response(config)
+
+
+@router.post("/llm-config/test", response_model=LLMTestResult)
+async def test_llm_config(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    """Test the current LLM configuration by sending a minimal request."""
+    result = await llm_service.test_connection()
+    return LLMTestResult(**result)

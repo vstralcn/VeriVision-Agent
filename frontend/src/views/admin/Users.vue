@@ -62,6 +62,9 @@
 import { ref, onMounted } from 'vue'
 import { adminAPI } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const users = ref([])
@@ -74,8 +77,8 @@ const loadUsers = async () => {
   try {
     const skip = (currentPage.value - 1) * pageSize.value
     const data = await adminAPI.getUsers(skip, pageSize.value)
-    users.value = data
-    total.value = data.length
+    users.value = data.items
+    total.value = data.total
   } catch (error) {
     ElMessage.error('Failed to load users')
   } finally {
@@ -92,7 +95,7 @@ const toggleUserStatus = async (user) => {
       'Confirm',
       {
         confirmButtonText: 'Yes',
-        cancelButtonText: $t('common.cancel'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning'
       }
     )

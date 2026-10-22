@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import base64
 import io
-from typing import Optional
 
 import numpy as np
 from fastapi import FastAPI, UploadFile, File

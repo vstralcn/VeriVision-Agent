@@ -63,8 +63,8 @@
             <el-col :span="12">
               <h4>{{ $t('detection.originalImage') }}</h4>
               <div class="xray-box">
-                <el-image
-                  :src="getImageUrl(detectionResult.image_path)"
+                <DetectionImage
+                  :detection-id="detectionResult.id"
                   fit="contain"
                   style="width: 100%; height: 100%;"
                 />
@@ -74,11 +74,14 @@
               <h4>{{ $t('detection.heatmap') }}</h4>
               <div class="xray-box heatmap-box">
                 <div class="scanner-line"></div>
-                <el-image
-                  :src="getImageUrl(detectionResult.heatmap_path)"
+                <DetectionImage
+                  v-if="detectionResult.heatmap_path"
+                  :detection-id="detectionResult.id"
+                  kind="heatmap"
                   fit="contain"
                   style="width: 100%; height: 100%;"
                 />
+                <el-empty v-else description="No localization map available" />
               </div>
             </el-col>
           </el-row>
@@ -119,7 +122,11 @@
             <p>{{ detectionResult.analysis_report.summary }}</p>
           </el-card>
 
-          <el-card style="margin-top: 20px" shadow="never">
+          <el-card
+            v-if="Object.keys(detectionResult.analysis_report.analysis || {}).length"
+            style="margin-top: 20px"
+            shadow="never"
+          >
             <h4>{{ $t('detection.detailedAnalysis') }}</h4>
             <el-row :gutter="20">
               <el-col :span="12" v-for="(value, key) in detectionResult.analysis_report.analysis" :key="key">
@@ -142,6 +149,17 @@
               </li>
             </ul>
           </el-card>
+
+          <section
+            v-if="detectionResult.llm_explanation && !detectionResult.llm_explanation.llm_error"
+            class="llm-explanation"
+          >
+            <h4>{{ $t('detection.aiExplanation') }}</h4>
+            <p><strong>{{ $t('detection.anomalousRegions') }}:</strong> {{ detectionResult.llm_explanation.anomalous_regions }}</p>
+            <p><strong>{{ $t('detection.evidenceAssessment') }}:</strong> {{ detectionResult.llm_explanation.why_fake }}</p>
+            <p><strong>{{ $t('detection.riskRationale') }}:</strong> {{ detectionResult.llm_explanation.risk_level_reason }}</p>
+            <p>{{ detectionResult.llm_explanation.overall_explanation }}</p>
+          </section>
 
           <!-- Trusted Certification -->
           <el-divider />
@@ -181,11 +199,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { detectionAPI } from '@/api'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
+import DetectionImage from '@/components/DetectionImage.vue'
 
 const router = useRouter()
 
@@ -196,6 +215,20 @@ const verifying = ref(false)
 const detectionResult = ref(null)
 
 const handleFileChange = (file) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+  if (!allowedTypes.includes(file.raw.type)) {
+    ElMessage.error('Supported image formats are JPEG, PNG, and WebP')
+    resetUpload()
+    return
+  }
+  if (file.raw.size > 10 * 1024 * 1024) {
+    ElMessage.error('Image must be 10MB or smaller')
+    resetUpload()
+    return
+  }
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+  }
   selectedFile.value = file.raw
   previewUrl.value = URL.createObjectURL(file.raw)
 }
@@ -219,13 +252,12 @@ const startDetection = async () => {
 }
 
 const resetUpload = () => {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+  }
   selectedFile.value = null
   previewUrl.value = ''
   detectionResult.value = null
-}
-
-const getImageUrl = (path) => {
-  return detectionAPI.getImageUrl(path)
 }
 
 // "只有在检测出 Deepfake 且 Risk level 极高时 才大面积亮起"
@@ -271,6 +303,12 @@ const verifyCertification = async () => {
 const viewTraceability = () => {
   router.push(`/traceability/${detectionResult.value.id}`)
 }
+
+onBeforeUnmount(() => {
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+  }
+})
 </script>
 
 <style scoped>
@@ -350,6 +388,18 @@ const viewTraceability = () => {
   margin-bottom: 8px;
   font-weight: 500;
   color: #4B5563;
+}
+
+.llm-explanation {
+  margin-top: 20px;
+  padding: 16px;
+  border-left: 3px solid var(--el-color-primary);
+  background: #f8fafc;
+}
+
+.llm-explanation p {
+  margin-top: 10px;
+  line-height: 1.6;
 }
 
 .cert-card {

@@ -1,7 +1,33 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Text, ForeignKey, JSON
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from app.core.database import Base
+
+
+class LLMConfig(Base):
+    """Single-row table storing the active LLM / AI agent configuration."""
+    __tablename__ = "llm_configs"
+
+    id = Column(Integer, primary_key=True, default=1)
+    provider = Column(String, default="openai")          # "openai" | "anthropic"
+    api_base_url = Column(String, default="https://api.openai.com/v1")
+    api_key = Column(String, default="")
+    model = Column(String, default="gpt-4o-mini")
+    enabled = Column(Boolean, default=False)
+    max_tokens = Column(Integer, default=512)
+    temperature = Column(Float, default=0.3)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 
 class User(Base):
@@ -34,6 +60,9 @@ class Detection(Base):
 
     # Analysis report
     analysis_report = Column(JSON, nullable=True)
+
+    # LLM explanation layer
+    llm_explanation = Column(JSON, nullable=True)
 
     # Trusted certification
     cert_id = Column(String, unique=True, nullable=False)

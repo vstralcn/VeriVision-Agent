@@ -80,8 +80,8 @@
             <el-table-column prop="id" label="ID" width="80" />
             <el-table-column :label="$t('common.image')" width="100">
               <template #default="{ row }">
-                <el-image
-                  :src="getImageUrl(row.image_path)"
+                <DetectionImage
+                  :detection-id="row.id"
                   fit="cover"
                   style="width: 60px; height: 60px; border-radius: 4px"
                 />
@@ -131,6 +131,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { userAPI, detectionAPI } from '@/api'
 import { ElMessage } from 'element-plus'
+import DetectionImage from '@/components/DetectionImage.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -181,22 +182,16 @@ const loadHistory = async () => {
   try {
     const skip = (currentPage.value - 1) * pageSize.value
     const data = await detectionAPI.getHistory(skip, pageSize.value)
-    history.value = data
-
-    // Calculate stats
-    stats.totalDetections = data.length
-    stats.fakeCount = data.filter(d => d.is_fake).length
-    stats.realCount = data.filter(d => !d.is_fake).length
-    total.value = data.length
+    history.value = data.items
+    stats.totalDetections = data.total
+    stats.fakeCount = data.fake_count
+    stats.realCount = data.real_count
+    total.value = data.total
   } catch (error) {
     ElMessage.error('Failed to load history')
   } finally {
     loading.value = false
   }
-}
-
-const getImageUrl = (path) => {
-  return detectionAPI.getImageUrl(path)
 }
 
 const formatDate = (dateString) => {

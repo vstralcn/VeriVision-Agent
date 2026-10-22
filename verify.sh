@@ -22,20 +22,20 @@ FAILED=0
 check_file() {
     if [ -f "$1" ]; then
         echo -e "${GREEN}✓${NC} $1"
-        ((PASSED++))
+        PASSED=$((PASSED + 1))
     else
         echo -e "${RED}✗${NC} $1 - MISSING"
-        ((FAILED++))
+        FAILED=$((FAILED + 1))
     fi
 }
 
 check_dir() {
     if [ -d "$1" ]; then
         echo -e "${GREEN}✓${NC} $1/"
-        ((PASSED++))
+        PASSED=$((PASSED + 1))
     else
         echo -e "${RED}✗${NC} $1/ - MISSING"
-        ((FAILED++))
+        FAILED=$((FAILED + 1))
     fi
 }
 
@@ -59,6 +59,8 @@ echo "Backend Structure:"
 check_dir "backend"
 check_file "backend/Dockerfile"
 check_file "backend/requirements.txt"
+check_file "backend/requirements-dev.txt"
+check_file "backend/pyproject.toml"
 check_file "backend/alembic.ini"
 check_file "backend/.env.example"
 check_file "backend/app/main.py"
@@ -72,6 +74,9 @@ check_file "backend/app/core/security.py"
 check_file "backend/app/models/models.py"
 check_file "backend/app/schemas/schemas.py"
 check_file "backend/app/services/detection_service.py"
+check_file "backend/app/services/llm_service.py"
+check_file "backend/alembic/versions/0001_baseline_schema.py"
+check_file "backend/tests/test_detection_safety.py"
 echo ""
 
 # Frontend structure
@@ -96,6 +101,8 @@ check_file "frontend/src/views/admin/AdminLayout.vue"
 check_file "frontend/src/views/admin/Dashboard.vue"
 check_file "frontend/src/views/admin/Users.vue"
 check_file "frontend/src/views/admin/Audit.vue"
+check_file "frontend/src/views/admin/Settings.vue"
+check_file "frontend/src/components/DetectionImage.vue"
 echo ""
 
 # Documentation
@@ -111,33 +118,32 @@ check_file "PROJECT_SUMMARY.md"
 check_file "PROJECT_SUMMARY_CN.md"
 check_file "FINAL_REPORT_CN.md"
 check_file "DELIVERY_CHECKLIST_CN.md"
-check_file "使用指南.md"
 echo ""
 
 # Check executables
 echo "Checking Script Permissions:"
 if [ -x "start.sh" ]; then
     echo -e "${GREEN}✓${NC} start.sh is executable"
-    ((PASSED++))
+    PASSED=$((PASSED + 1))
 else
     echo -e "${RED}✗${NC} start.sh is not executable"
-    ((FAILED++))
+    FAILED=$((FAILED + 1))
 fi
 
 if [ -x "stop.sh" ]; then
     echo -e "${GREEN}✓${NC} stop.sh is executable"
-    ((PASSED++))
+    PASSED=$((PASSED + 1))
 else
     echo -e "${RED}✗${NC} stop.sh is not executable"
-    ((FAILED++))
+    FAILED=$((FAILED + 1))
 fi
 
 if [ -x "dev.sh" ]; then
     echo -e "${GREEN}✓${NC} dev.sh is executable"
-    ((PASSED++))
+    PASSED=$((PASSED + 1))
 else
     echo -e "${RED}✗${NC} dev.sh is not executable"
-    ((FAILED++))
+    FAILED=$((FAILED + 1))
 fi
 echo ""
 
@@ -150,7 +156,7 @@ echo -e "Failed: ${RED}${FAILED}${NC}"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✅ All checks passed! Project is ready to deploy.${NC}"
+    echo -e "${GREEN}✅ Project structure checks passed.${NC}"
     echo ""
     echo "Next steps:"
     echo "1. Run: ./start.sh"

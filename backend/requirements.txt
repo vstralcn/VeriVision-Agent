@@ -19,3 +19,5 @@ tqdm
 scikit-learn
 onnx
 onnxruntime
+anthropic>=0.40.0
+openai>=1.0.0

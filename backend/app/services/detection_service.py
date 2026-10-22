@@ -1,40 +1,67 @@
+import asyncio
 import hashlib
+import hmac
+import logging
 import os
 import uuid
 from datetime import datetime
 from typing import Optional
-from PIL import Image
-import numpy as np
-import cv2
-from sqlalchemy.orm import Session
-from app.models.models import Detection, TraceRecord
-from app.core.config import settings
 
+import cv2
+import numpy as np
 import torch
+from PIL import Image
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
 from app.ml_models.forensicnet.infer import load_model, predict
+from app.models.models import Detection, TraceRecord
+from app.services.llm_service import llm_service
+
+logger = logging.getLogger(__name__)
+
+
+class ModelUnavailableError(RuntimeError):
+    """Raised when the configured detection model cannot be used."""
+
+
+class InferenceError(RuntimeError):
+    """Raised when model inference fails for an otherwise valid image."""
 
 
 class DeepfakeDetectionService:
-    """
-    Mock deepfake detection service.
-    In production, this would integrate with a real ML model from HuggingFace.
-    """
+    """Run ForensicNet inference and persist attributable detection results."""
 
     def __init__(self):
         self.upload_dir = settings.UPLOAD_DIR
         os.makedirs(f"{self.upload_dir}/images", exist_ok=True)
         os.makedirs(f"{self.upload_dir}/heatmaps", exist_ok=True)
-        
-        # Load the ForensicNet model
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ml_models", "weights", "best.pt")
+
+        self.device = "cuda" if settings.USE_GPU and torch.cuda.is_available() else "cpu"
+        self.model = None
+        self.model_error = "Model has not been initialized"
+
+    def initialize(self) -> None:
+        """Load the configured model without preventing the API from starting."""
+        model_path = settings.MODEL_PATH
+        if not os.path.isabs(model_path):
+            model_path = os.path.abspath(model_path)
+            if not os.path.exists(model_path):
+                backend_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                model_path = os.path.join(backend_root, settings.MODEL_PATH)
+
         try:
             self.model = load_model(model_path, device=self.device)
-            print(f"Model loaded successfully on {self.device}")
+            self.model_error = None
+            logger.info("Detection model loaded from %s on %s", model_path, self.device)
         except Exception as e:
-            print(f"Failed to load model from {model_path}: {e}")
             self.model = None
+            self.model_error = str(e)
+            logger.error("Failed to load detection model from %s: %s", model_path, e)
 
+    @property
+    def is_ready(self) -> bool:
+        return self.model is not None
 
     async def detect_image(
         self,
@@ -49,21 +76,16 @@ class DeepfakeDetectionService:
         sha256_hash = self._calculate_sha256(image_path)
         phash = self._calculate_phash(image_path)
 
-        if self.model is not None:
-            try:
-                with open(image_path, "rb") as f:
-                    image_bytes = f.read()
-                
-                result = predict(self.model, image_bytes, device=self.device, return_mask=True)
-                fake_probability = float(result.fake_prob)
-                mask_prob = result.mask_prob
-            except Exception as e:
-                print(f"Prediction failed: {e}")
-                fake_probability = np.random.uniform(0.3, 0.9)
-                mask_prob = None
-        else:
-            fake_probability = np.random.uniform(0.3, 0.9)
-            mask_prob = None
+        if self.model is None:
+            raise ModelUnavailableError(self.model_error or "Detection model is unavailable")
+
+        try:
+            result = await asyncio.to_thread(self._predict_image, image_path)
+            fake_probability = float(result.fake_prob)
+            mask_prob = result.mask_prob
+        except Exception as e:
+            logger.exception("Prediction failed for %s", image_path)
+            raise InferenceError("Detection model inference failed") from e
 
         is_fake = fake_probability > 0.5
         confidence = abs(fake_probability - 0.5) * 2
@@ -72,8 +94,16 @@ class DeepfakeDetectionService:
         heatmap_path = self._generate_heatmap(image_path, mask_prob)
 
         # Generate analysis report
-        analysis_report = self._generate_analysis_report(
-            is_fake, fake_probability, confidence
+        analysis_report = self._generate_analysis_report(is_fake, fake_probability, confidence)
+
+        # Generate LLM explanation
+        llm_explanation = await llm_service.generate_explanation(
+            is_fake=is_fake,
+            fake_probability=fake_probability,
+            confidence=confidence,
+            risk_level=analysis_report["risk_level"],
+            analysis=analysis_report["analysis"],
+            mask_prob=mask_prob,
         )
 
         # Generate trusted certification
@@ -89,27 +119,39 @@ class DeepfakeDetectionService:
             confidence=confidence,
             fake_probability=fake_probability,
             analysis_report=analysis_report,
+            llm_explanation=llm_explanation,
             cert_id=cert_id,
             cert_signature=cert_signature,
             sha256=sha256_hash,
             phash=phash,
         )
-        db.add(detection)
-        db.commit()
-        db.refresh(detection)
-
-        # Create trace records
-        self._create_trace_record(
-            db, detection.id, "uploaded", "Image uploaded for detection"
-        )
-        self._create_trace_record(
-            db,
-            detection.id,
-            "detected",
-            f"Detection completed: {'Fake' if is_fake else 'Real'}"
-        )
+        try:
+            db.add(detection)
+            db.flush()
+            db.add_all([
+                self._build_trace_record(
+                    detection.id, "uploaded", "Image uploaded for detection"
+                ),
+                self._build_trace_record(
+                    detection.id,
+                    "detected",
+                    f"Detection completed: {'Fake' if is_fake else 'Real'}",
+                ),
+            ])
+            db.commit()
+            db.refresh(detection)
+        except Exception:
+            db.rollback()
+            if heatmap_path and os.path.exists(heatmap_path):
+                os.remove(heatmap_path)
+            raise
 
         return detection
+
+    def _predict_image(self, image_path: str):
+        with open(image_path, "rb") as image_file:
+            image_bytes = image_file.read()
+        return predict(self.model, image_bytes, device=self.device, return_mask=True)
 
     def _calculate_sha256(self, image_path: str) -> str:
         """Calculate SHA256 hash of image file."""
@@ -120,15 +162,19 @@ class DeepfakeDetectionService:
         return sha256_hash.hexdigest()
 
     def _calculate_phash(self, image_path: str) -> str:
-        """Calculate perceptual hash of image."""
-        img = Image.open(image_path).convert('L')
-        img = img.resize((8, 8), Image.Resampling.LANCZOS)
-        pixels = np.array(img).flatten()
-        avg = pixels.mean()
-        phash = ''.join(['1' if pixel > avg else '0' for pixel in pixels])
-        return hex(int(phash, 2))[2:].zfill(16)
+        """Calculate a 64-bit DCT perceptual hash of the image."""
+        with Image.open(image_path) as source_image:
+            img = source_image.convert("L").resize(
+                (32, 32), Image.Resampling.LANCZOS
+            )
+        dct = cv2.dct(np.asarray(img, dtype=np.float32))[:8, :8]
+        median = np.median(dct.flatten()[1:])
+        bits = (dct > median).flatten()
+        return f"{int(''.join('1' if bit else '0' for bit in bits), 2):016x}"
 
-    def _generate_heatmap(self, image_path: str, mask_prob: Optional[np.ndarray] = None) -> str:
+    def _generate_heatmap(
+        self, image_path: str, mask_prob: Optional[np.ndarray] = None
+    ) -> Optional[str]:
         """
         Generate a heatmap visualization based on the model's mask prediction.
         """
@@ -144,9 +190,7 @@ class DeepfakeDetectionService:
             # Create heatmap from mask probability
             heatmap = (mask_resized * 255).astype(np.uint8)
         else:
-            # Create mock heatmap if no mask is provided
-            heatmap = np.random.rand(height, width) * 255
-            heatmap = heatmap.astype(np.uint8)
+            return None
             
         heatmap_color = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
 
@@ -156,9 +200,10 @@ class DeepfakeDetectionService:
         # Save heatmap
         heatmap_filename = f"heatmap_{uuid.uuid4().hex}.jpg"
         heatmap_path = f"{self.upload_dir}/heatmaps/{heatmap_filename}"
-        cv2.imwrite(heatmap_path, overlay)
-
-        return heatmap_path
+        if cv2.imwrite(heatmap_path, overlay):
+            return heatmap_path
+        logger.error("Failed to write heatmap to %s", heatmap_path)
+        return None
 
     def _generate_analysis_report(
         self, is_fake: bool, fake_probability: float, confidence: float
@@ -169,12 +214,7 @@ class DeepfakeDetectionService:
             "fake_probability": round(fake_probability, 4),
             "confidence": round(confidence, 4),
             "risk_level": self._get_risk_level(fake_probability),
-            "analysis": {
-                "face_manipulation": round(np.random.uniform(0.1, 0.9), 4),
-                "texture_inconsistency": round(np.random.uniform(0.1, 0.9), 4),
-                "lighting_artifacts": round(np.random.uniform(0.1, 0.9), 4),
-                "compression_anomalies": round(np.random.uniform(0.1, 0.9), 4),
-            },
+            "analysis": {},
             "summary": self._generate_summary(is_fake, fake_probability),
             "recommendations": self._generate_recommendations(is_fake),
         }
@@ -226,27 +266,32 @@ class DeepfakeDetectionService:
 
     def _generate_signature(self, cert_id: str, sha256: str) -> str:
         """Generate cryptographic signature for certification."""
-        data = f"{cert_id}:{sha256}:{settings.SECRET_KEY}"
-        signature = hashlib.sha256(data.encode()).hexdigest()
-        return signature
+        data = f"{cert_id}:{sha256}".encode()
+        key = settings.CERTIFICATION_KEY or settings.SECRET_KEY
+        return hmac.new(key.encode(), data, hashlib.sha256).hexdigest()
 
     def verify_signature(self, cert_id: str, sha256: str, signature: str) -> bool:
         """Verify certification signature."""
+        if not signature:
+            return False
         expected_signature = self._generate_signature(cert_id, sha256)
-        return signature == expected_signature
+        if hmac.compare_digest(signature, expected_signature):
+            return True
 
-    def _create_trace_record(
-        self, db: Session, detection_id: int, action: str, description: str
-    ):
-        """Create a trace record for audit trail."""
-        trace_record = TraceRecord(
+        # Existing records used this legacy digest. New records use HMAC.
+        legacy_data = f"{cert_id}:{sha256}:{settings.SECRET_KEY}"
+        legacy_signature = hashlib.sha256(legacy_data.encode()).hexdigest()
+        return hmac.compare_digest(signature, legacy_signature)
+
+    def _build_trace_record(
+        self, detection_id: int, action: str, description: str
+    ) -> TraceRecord:
+        return TraceRecord(
             detection_id=detection_id,
             action=action,
             description=description,
-            metadata={"timestamp": datetime.utcnow().isoformat()},
+            meta_info={"timestamp": datetime.utcnow().isoformat()},
         )
-        db.add(trace_record)
-        db.commit()
 
 
 # Singleton instance

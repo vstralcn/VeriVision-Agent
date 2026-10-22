@@ -1,13 +1,11 @@
 
 from __future__ import annotations
 import argparse
-import os
 from pathlib import Path
 from typing import Dict
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from sklearn.metrics import roc_auc_score, accuracy_score
 from tqdm import tqdm

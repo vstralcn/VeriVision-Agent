@@ -1,49 +1,68 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from app.core.database import engine, SessionLocal, Base
+
+from app.api import admin, auth, detection, user
+from app.core.config import settings
+from app.core.database import SessionLocal
 from app.core.security import get_password_hash
 from app.models.models import User
-from app.api import auth, detection, admin, user
+from app.services.detection_service import detection_service
+from app.services.llm_service import llm_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize database and create default users on startup."""
-    # Create tables
-    Base.metadata.create_all(bind=engine)
+    """Initialize runtime services after Alembic has prepared the database."""
+    if settings.ENVIRONMENT.lower() == "production":
+        if settings.SECRET_KEY == "your-secret-key-change-in-production":
+            raise RuntimeError("SECRET_KEY must be changed in production")
+        if not settings.CERTIFICATION_KEY:
+            raise RuntimeError("CERTIFICATION_KEY must be set in production")
+        if settings.CREATE_DEFAULT_USERS:
+            raise RuntimeError("CREATE_DEFAULT_USERS must be disabled in production")
 
-    # Create default users
     db = SessionLocal()
     try:
-        # Check if admin exists
-        admin_user = db.query(User).filter(User.email == "admin@example.com").first()
-        if not admin_user:
-            admin_user = User(
-                email="admin@example.com",
-                nickname="Admin",
-                hashed_password=get_password_hash("admin123"),
-                role="admin",
-                is_active=True,
-            )
-            db.add(admin_user)
-            print("✓ Created default admin user: admin@example.com / admin123")
+        if settings.CREATE_DEFAULT_USERS:
+            admin_user = db.query(User).filter(
+                User.email == settings.DEFAULT_ADMIN_EMAIL
+            ).first()
+            if not admin_user:
+                db.add(User(
+                    email=settings.DEFAULT_ADMIN_EMAIL,
+                    nickname="Admin",
+                    hashed_password=get_password_hash(settings.DEFAULT_ADMIN_PASSWORD),
+                    role="admin",
+                    is_active=True,
+                ))
 
-        # Check if regular user exists
-        regular_user = db.query(User).filter(User.email == "user@example.com").first()
-        if not regular_user:
-            regular_user = User(
-                email="user@example.com",
-                nickname="User",
-                hashed_password=get_password_hash("user123"),
-                role="user",
-                is_active=True,
-            )
-            db.add(regular_user)
-            print("✓ Created default user: user@example.com / user123")
+            regular_user = db.query(User).filter(
+                User.email == settings.DEFAULT_USER_EMAIL
+            ).first()
+            if not regular_user:
+                db.add(User(
+                    email=settings.DEFAULT_USER_EMAIL,
+                    nickname="User",
+                    hashed_password=get_password_hash(settings.DEFAULT_USER_PASSWORD),
+                    role="user",
+                    is_active=True,
+                ))
+            db.commit()
+    finally:
+        db.close()
 
-        db.commit()
+    detection_service.initialize()
+
+    # Load LLM config from DB into the service singleton
+    db = SessionLocal()
+    try:
+        from app.models.models import LLMConfig
+        llm_db_config = db.query(LLMConfig).filter(LLMConfig.id == 1).first()
+        if llm_db_config:
+            llm_service.reload_config(llm_db_config)
+            print(f"✓ LLM config loaded: provider={llm_db_config.provider} model={llm_db_config.model} enabled={llm_db_config.enabled}")
     finally:
         db.close()
 
@@ -85,5 +104,16 @@ def root():
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint."""
+    """Process liveness check."""
     return {"status": "healthy"}
+
+
+@app.get("/ready")
+def readiness_check():
+    """Readiness check for dependencies needed to produce detection results."""
+    if not detection_service.is_ready:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Detection model is unavailable",
+        )
+    return {"status": "ready", "model_device": detection_service.device}

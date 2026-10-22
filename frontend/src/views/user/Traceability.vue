@@ -33,8 +33,8 @@
           <el-col :span="12">
             <h4>{{ $t('common.image') }}</h4>
             <div class="image-viewer">
-              <el-image
-                :src="getImageUrl(detection.image_path)"
+              <DetectionImage
+                :detection-id="detection.id"
                 fit="contain"
                 style="width: 100%; border-radius: 4px"
               />
@@ -89,10 +89,10 @@
               <h4 class="action-title">{{ formatAction(record.action) }}</h4>
               <p class="record-desc">{{ record.description }}</p>
               
-              <div v-if="record.metadata" class="metadata-section">
+              <div v-if="record.meta_info" class="metadata-section">
                 <el-collapse v-model="activeCollapses" @change="handleChange">
                   <el-collapse-item title="View Cryptographic Signature / Metadata" :name="record.id">
-                    <pre class="code-block font-mono">{{ JSON.stringify(record.metadata, null, 2) }}</pre>
+                    <pre class="code-block font-mono">{{ JSON.stringify(record.meta_info, null, 2) }}</pre>
                   </el-collapse-item>
                 </el-collapse>
               </div>
@@ -113,6 +113,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { detectionAPI } from '@/api'
 import { ElMessage } from 'element-plus'
+import DetectionImage from '@/components/DetectionImage.vue'
 
 const route = useRoute()
 
@@ -130,7 +131,8 @@ const handleChange = (val) => {
 
 const loadDetectionList = async () => {
   try {
-    detectionList.value = await detectionAPI.getHistory(0, 50)
+    const data = await detectionAPI.getHistory(0, 50)
+    detectionList.value = data.items
   } catch (error) {
     ElMessage.error('Failed to load detection list')
   }
@@ -151,10 +153,6 @@ const loadDetection = async () => {
   } finally {
     loading.value = false
   }
-}
-
-const getImageUrl = (path) => {
-  return detectionAPI.getImageUrl(path)
 }
 
 const formatDate = (dateString) => {

@@ -54,8 +54,17 @@ const routes = [
         path: 'audit',
         name: 'AuditLogs',
         component: () => import('@/views/admin/Audit.vue')
+      },
+      {
+        path: 'settings',
+        name: 'AdminSettings',
+        component: () => import('@/views/admin/Settings.vue')
       }
     ]
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/'
   }
 ]
 

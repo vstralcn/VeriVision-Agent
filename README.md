@@ -62,7 +62,8 @@ deepfake-detection-platform/
 │   │   ├── schemas/           # Pydantic schemas
 │   │   │   └── schemas.py     # Request/response schemas
 │   │   ├── services/          # Business logic
-│   │   │   └── detection_service.py  # Detection service
+│   │   │   ├── detection_service.py  # Detection service
+│   │   │   └── llm_service.py        # LLM explanation layer (Claude)
 │   │   └── main.py            # FastAPI application
 │   ├── alembic/               # Database migrations
 │   ├── uploads/               # Uploaded files
@@ -161,6 +162,11 @@ npm run preview
      - Risk level assessment
      - Detailed analysis metrics
      - Recommendations
+   - **LLM Explanation Layer** (powered by Claude):
+     - Natural-language description of anomalous regions
+     - Forensic reasoning for why the image appears manipulated
+     - Risk level rationale
+     - Comprehensive analyst-facing summary
    - Trusted certification with:
      - Unique certification ID
      - SHA256 hash
@@ -276,13 +282,8 @@ npm run preview
 ### Backend Testing
 
 ```bash
-cd backend
-
-# Run tests (when implemented)
-pytest
-
-# Check code coverage
-pytest --cov=app
+# Start the development containers, then run the safety and detection-path tests
+docker compose exec backend python -m pytest
 ```
 
 ### Frontend Testing
@@ -290,11 +291,8 @@ pytest --cov=app
 ```bash
 cd frontend
 
-# Run unit tests (when implemented)
-npm run test
-
-# Run e2e tests
-npm run test:e2e
+# Production build check; frontend unit and E2E tests are not configured yet
+npm run build
 ```
 
 ## 🐳 Docker Commands
@@ -328,6 +326,8 @@ DATABASE_URL=postgresql://deepfake_user:deepfake_pass@postgres:5432/deepfake_db
 SECRET_KEY=your-secret-key-change-in-production
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+CERTIFICATION_KEY=replace-with-an-independent-secret
+CREATE_DEFAULT_USERS=true  # development only
 ```
 
 ### Frontend
@@ -338,9 +338,9 @@ Frontend uses Vite proxy configuration in `vite.config.js` to connect to backend
 
 The database is automatically initialized on first startup:
 
-1. Tables are created using SQLAlchemy models
-2. Default admin and user accounts are created
-3. Alembic migrations are applied
+1. Alembic creates or upgrades the schema
+2. Demo accounts are created when enabled in development
+3. The detection model and optional LLM service are initialized
 
 To reset the database:
 
@@ -351,6 +351,42 @@ docker-compose down -v
 # Start services (will reinitialize)
 docker-compose up -d
 ```
+
+## 🤖 LLM Explanation Layer
+
+After the deepfake model produces a result, the platform passes the detection signals to **Claude** (via the Anthropic API) to generate a structured, analyst-facing explanation.
+
+### Pipeline
+
+```
+Image Upload
+    │
+    ▼
+ForensicNet (ML model)
+    │  fake_probability  +  heatmap mask
+    ▼
+LLM Explanation Service  ──►  Claude (claude-haiku-4-5-20251001)
+    │
+    ▼
+Structured JSON stored in detection.llm_explanation
+    ├── anomalous_regions   – which spatial areas are suspicious
+    ├── why_fake            – forensic reasoning for manipulation signals
+    ├── risk_level_reason   – why the risk is classified Low / Medium / High
+    └── overall_explanation – cohesive analyst-facing summary
+```
+
+### Configuration
+
+After signing in as an administrator, configure the provider, model, and API key on the AI Agent Settings page. Detection still works when this feature is disabled or no key is configured. The current implementation stores the key in the database; production deployments should connect it to a secret manager.
+
+### LLM Input Signals
+
+| Signal | Source |
+|---|---|
+| `fake_probability` | ForensicNet output |
+| `confidence` | Derived from `fake_probability` |
+| `risk_level` | Low / Medium / High threshold rules |
+| `heatmap_stats` | Spatial statistics derived from mask probability map |
 
 ## 🚨 Troubleshooting
 
@@ -379,22 +415,16 @@ docker-compose up -d
 
 ### Database migration issues
 
-```bash
-# Reset migrations
-docker-compose exec backend alembic downgrade base
-docker-compose exec backend alembic upgrade head
-```
+The baseline migration can adopt tables created by older releases, so it is
+intentionally non-reversible. Back up the database before migration and restore
+that backup if a rollback is required. Use `docker compose exec backend alembic
+current` to inspect the applied revision.
 
 ## 📝 Development Notes
 
-### Mock Detection Service
+### Detection Model
 
-The current implementation uses a **mock detection service** that generates random results. This is intentional for MVP demonstration purposes.
-
-To integrate a real deepfake detection model:
-1. See [MODEL_DEPLOY.md](docs/MODEL_DEPLOY.md) for detailed instructions
-2. Replace the mock implementation in `backend/app/services/detection_service.py`
-3. The service interface is designed to be pluggable
+The detection service loads the ForensicNet checkpoint configured by `MODEL_PATH`. If the model is missing or inference fails, the API returns an explicit error and never generates a random result. Checkpoints are not committed to Git, so deployments must provide one separately and verify its checksum. Training data, reported metrics, and generalization still require independent validation.
 
 ### Adding New Features
 

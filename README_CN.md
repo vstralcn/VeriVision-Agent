@@ -62,7 +62,8 @@ deepfake-detection-platform/
 │   │   ├── schemas/           # Pydantic 模式
 │   │   │   └── schemas.py     # 请求/响应模式
 │   │   ├── services/          # 业务逻辑
-│   │   │   └── detection_service.py  # 检测服务
+│   │   │   ├── detection_service.py  # 检测服务
+│   │   │   └── llm_service.py        # LLM 解释层（Claude）
 │   │   └── main.py            # FastAPI 应用程序
 │   ├── alembic/               # 数据库迁移
 │   ├── uploads/               # 上传的文件
@@ -161,6 +162,11 @@ npm run preview
      - 风险等级评估
      - 详细分析指标
      - 建议
+   - **LLM 解释层**（由 Claude 驱动）：
+     - 异常区域的自然语言描述
+     - 图像疑似伪造的取证推理
+     - 风险等级判定依据
+     - 面向分析师的综合摘要
    - 可信认证包含：
      - 唯一认证 ID
      - SHA256 哈希
@@ -276,13 +282,8 @@ npm run preview
 ### 后端测试
 
 ```bash
-cd backend
-
-# 运行测试（实现后）
-pytest
-
-# 检查代码覆盖率
-pytest --cov=app
+# 启动开发容器后运行安全与检测链路测试
+docker compose exec backend python -m pytest
 ```
 
 ### 前端测试
@@ -290,11 +291,8 @@ pytest --cov=app
 ```bash
 cd frontend
 
-# 运行单元测试（实现后）
-npm run test
-
-# 运行端到端测试
-npm run test:e2e
+# 当前执行生产构建检查；前端单元测试和 E2E 尚待补充
+npm run build
 ```
 
 ## 🐳 Docker 命令
@@ -328,6 +326,8 @@ DATABASE_URL=postgresql://deepfake_user:deepfake_pass@postgres:5432/deepfake_db
 SECRET_KEY=your-secret-key-change-in-production
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+CERTIFICATION_KEY=replace-with-an-independent-secret
+CREATE_DEFAULT_USERS=true  # 仅开发环境
 ```
 
 ### 前端
@@ -338,9 +338,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 数据库在首次启动时自动初始化：
 
-1. 使用 SQLAlchemy 模型创建表
-2. 创建默认管理员和用户账户
-3. 应用 Alembic 迁移
+1. 使用 Alembic 创建或升级表结构
+2. 在开发模式下按配置创建演示账号
+3. 初始化检测模型和可选 LLM 服务
 
 重置数据库：
 
@@ -351,6 +351,42 @@ docker-compose down -v
 # 启动服务（将重新初始化）
 docker-compose up -d
 ```
+
+## 🤖 LLM 解释层
+
+检测模型输出结果后，平台将检测信号传递给 **Claude**（通过 Anthropic API），生成结构化的、面向分析师的自然语言解释。
+
+### 处理流程
+
+```
+图片上传
+    │
+    ▼
+ForensicNet（ML 模型）
+    │  伪造概率  +  热力图掩码
+    ▼
+LLM 解释服务  ──►  Claude (claude-haiku-4-5-20251001)
+    │
+    ▼
+结构化 JSON 存储于 detection.llm_explanation
+    ├── anomalous_regions   – 哪些空间区域存在异常
+    ├── why_fake            – 图像疑似伪造的取证推理
+    ├── risk_level_reason   – 风险等级（低/中/高）的判定依据
+    └── overall_explanation – 综合面向分析师的摘要
+```
+
+### 配置方式
+
+管理员登录后在“AI 智能体设置”页面配置服务商、模型和 API Key。关闭该功能或未配置密钥时，检测仍可完成，但不会生成 LLM 解释。当前 API Key 保存在数据库中，正式部署应改接密钥管理服务。
+
+### LLM 输入信号
+
+| 信号 | 来源 |
+|---|---|
+| `fake_probability` | ForensicNet 模型输出 |
+| `confidence` | 由 `fake_probability` 派生 |
+| `risk_level` | 低/中/高 阈值规则 |
+| `heatmap_stats` | 掩码概率图的空间统计信息 |
 
 ## 🚨 故障排除
 
@@ -379,22 +415,13 @@ docker-compose up -d
 
 ### 数据库迁移问题
 
-```bash
-# 重置迁移
-docker-compose exec backend alembic downgrade base
-docker-compose exec backend alembic upgrade head
-```
+基线迁移会接管旧版本已经创建的业务表，因此被明确设计为不可逆。迁移前应备份数据库；需要回滚时恢复备份，不要通过降级删除业务表。可运行 `docker compose exec backend alembic current` 查看当前迁移版本。
 
 ## 📝 开发说明
 
-### 模拟检测服务
+### 检测模型
 
-当前实现使用**模拟检测服务**生成随机结果。这是为了 MVP 演示目的而设计的。
-
-要集成真实的 Deepfake 检测模型：
-1. 查看 [MODEL_DEPLOY.md](docs/MODEL_DEPLOY.md) 获取详细说明
-2. 替换 `backend/app/services/detection_service.py` 中的模拟实现
-3. 服务接口设计为可插拔的
+当前检测服务加载 `MODEL_PATH` 指向的 ForensicNet 权重。模型缺失或推理失败时接口会明确返回错误，不会生成随机检测结果。权重文件不纳入 Git，部署时必须单独提供并核对哈希；模型训练数据、指标和泛化能力仍需独立验证。
 
 ### 添加新功能
 

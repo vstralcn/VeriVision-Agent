@@ -30,8 +30,8 @@
             <el-table-column prop="id" label="ID" width="80" />
             <el-table-column :label="$t('common.image')" width="100">
               <template #default="{ row }">
-                <el-image
-                  :src="getImageUrl(row.image_path)"
+                <DetectionImage
+                  :detection-id="row.id"
                   fit="cover"
                   style="width: 60px; height: 60px; border-radius: 4px"
                 />
@@ -82,6 +82,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { detectionAPI } from '@/api'
 import { ElMessage } from 'element-plus'
+import DetectionImage from '@/components/DetectionImage.vue'
 
 const router = useRouter()
 const loading = ref(false)
@@ -96,10 +97,6 @@ const fetchRecentDetections = async () => {
   } finally {
     loading.value = false
   }
-}
-
-const getImageUrl = (path) => {
-  return detectionAPI.getImageUrl(path)
 }
 
 const formatDate = (dateString) => {
